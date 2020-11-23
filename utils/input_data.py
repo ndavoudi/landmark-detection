@@ -2,9 +2,10 @@
 
 import os
 import numpy as np
-import nibabel as nib
-from tensorflow.contrib.learn.python.learn.datasets import base
-import shape_model_func
+#from tensorflow.contrib.learn.python.learn.datasets import base
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from utils import shape_model_func
 
 
 class DataSet(object):
@@ -72,23 +73,6 @@ def extract_label(filename):
   return labels
 
 
-def select_label(labels, landmark_unwant):
-  """Unwanted landmarks are removed.
-     Remove topHead (landmark index 0).
-     Remove left or right ventricle (landmark index (6,7) or (8,9)).
-     Remove mid CSP (landmark index 13).
-     Remove left and right eyes (landmark index 14 and 15).
-
-  Args:
-    labels: a 2D float64 numpy array.
-    landmark_unwant: indices of the unwanted landmarks
-
-  Returns:
-    labels: a 2D float64 numpy array.
-  """
-  removed_label_ind = list(landmark_unwant)
-  labels = np.delete(labels, removed_label_ind, 0)
-  return labels
 
 
 def extract_all_image_and_label(file_list,
