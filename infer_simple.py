@@ -19,6 +19,11 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from utils import input_data, shape_model_func, patch, plane
 
+
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+
+
 np.random.seed(0)
 
 class Config(object):
@@ -34,6 +39,13 @@ class Config(object):
     max_test_steps = 10     # Number of inference steps
     num_random_init = 5     # Number of random initialisations used
 
+    data_dir = './data/Images'
+    label_dir = './data/Landmarks'
+    test_list_file = './data/list_test.txt'
+    landmark_unwant = [0, 8, 9, 13, 14, 15]     # list of unwanted landmark indices
+    batch_size = 1
+
+
 
 def main():
     config = Config()
@@ -42,7 +54,23 @@ def main():
     shape_model = shape_model_func.load_shape_model(config.shape_model_file, config.eigvec_per)
 
     # Load one test image
-    img, pix_dim = input_data.extract_image('./data/Images/data1.nii.gz')
+    #img, pix_dim = input_data.extract_image('./data/Images/data1')
+
+
+
+    filename, img, labels, shape_params, pix_dim = input_data.generate_batch_image_and_label(config.data_dir,
+                                                                                                 config.label_dir,
+                                                                                                 config.test_list_file,
+                                                                                                 config.landmark_count,
+                                                                                                 config.landmark_unwant,
+                                                                                                 shape_model,
+                                                                                                 config.batch_size)
+
+
+
+
+
+
 
     # Load CNN model
     cnn_model = {}
@@ -121,13 +149,13 @@ def predict_landmarks(image, pix_dim, config, shape_model, cnn_model):
 
     # Extract patches from landmarks
     patches = np.zeros((num_examples, box_size, box_size, 3 * num_landmarks))
-    for j in xrange(num_examples):
+    for j in range(num_examples):
         patches[j] = patch.extract_patch_all_landmarks(image, landmarks[j], box_r)  # patches=[num_examples, box_size, box_size, 3*num_landmarks]
 
     landmarks_all_steps = np.zeros((max_test_steps + 1, num_examples, num_landmarks, 3))
     landmarks_all_steps[0] = landmarks
 
-    for j in xrange(max_test_steps):  # find path of landmark iteratively
+    for j in range(max_test_steps):  # find path of landmark iteratively
         # Predict CNN outputs
         action_ind_val, yc_val, yr_val = cnn_model['sess'].run([cnn_model['action_ind'],
                                                                 cnn_model['yc'],
@@ -147,7 +175,7 @@ def predict_landmarks(image, pix_dim, config, shape_model, cnn_model):
         landmarks_all_steps[j + 1] = landmarks
 
         # Extract patches from landmarks
-        for k in xrange(num_examples):
+        for k in range(num_examples):
             patches[k] = patch.extract_patch_all_landmarks(image, landmarks[k], box_r)  # patches=[num_examples, box_size, box_size, 3*num_landmarks]
 
     # Compute mean of all initialisations as final landmark prediction

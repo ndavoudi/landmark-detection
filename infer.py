@@ -16,8 +16,10 @@ from __future__ import print_function
 import numpy as np
 import scipy.ndimage
 import time
-import tensorflow as tf
+#import tensorflow as tf
 from utils import input_data, shape_model_func, patch, save, visual
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 np.random.seed(0)
 
@@ -46,6 +48,7 @@ class Config(object):
                             # 3: Classification only
     # Visualisation parameters
     visual = True           # Whether to save visualisation
+    batch_size = 1
 
 
 def main():
@@ -55,13 +58,14 @@ def main():
     shape_model = shape_model_func.load_shape_model(config.shape_model_file, config.eigvec_per)
 
     # Load images and landmarks
-    data = input_data.read_data_sets(config.data_dir,
-                                     config.label_dir,
-                                     config.train_list_file,
-                                     config.test_list_file,
-                                     config.landmark_count,
-                                     config.landmark_unwant,
-                                     shape_model)
+    #data = input_data.read_data_sets(config.data_dir,
+    filename, images, labels, shape_params, pix_dims = input_data.generate_batch_image_and_label(config.data_dir,
+                                                     config.label_dir,
+                                                     config.test_list_file,
+                                                     config.landmark_count,
+                                                     config.landmark_unwant,
+                                                     shape_model,
+                                                     config.batch_size)
 
     print("Start inference...")
     tf.reset_default_graph()
@@ -78,15 +82,19 @@ def main():
     keep_prob = g.get_collection('keep_prob')[0]
 
     # Evaluation on test-set
-    predict(data.test, config, shape_model, False,
+    #predict(data.test, config, shape_model, False,
+    #        sess, x, action_ind, yc, yr, keep_prob)
+
+    predict(images, labels, filename, pix_dims, config, shape_model, False,
             sess, x, action_ind, yc, yr, keep_prob)
     # Evaluation on train-set
-    predict(data.train, config, shape_model, True,
-            sess, x, action_ind, yc, yr, keep_prob)
+    #predict(data.train, config, shape_model, True,
+    #        sess, x, action_ind, yc, yr, keep_prob)
     sess.close()
 
-
-def predict(data, config, shape_model, train,
+#def predict(data, config, shape_model, train,
+#            sess, x, action_ind, yc, yr, keep_prob):
+def predict(images, landmarks_gt, names, pix_dim, config, shape_model, train,
             sess, x, action_ind, yc, yr, keep_prob):
     """Find the path of the landmark iteratively, and evaluate the results.
 
@@ -98,10 +106,10 @@ def predict(data, config, shape_model, train,
       sess, x, action_ind, yc, yr, keep_prob: tensorflow nodes required for inference
 
     """
-    images = data.images
-    landmarks_gt = data.labels
-    names = data.names
-    pix_dim = data.pix_dim
+    #images = data.images
+    #landmarks_gt = data.labels
+    #names = data.names
+    #pix_dim = data.pix_dim
     num_landmarks = config.landmark_count
     img_count = len(images)
     max_test_steps = config.max_test_steps
@@ -114,7 +122,7 @@ def predict(data, config, shape_model, train,
     images_unscale = []
     time_elapsed = np.zeros(img_count)
 
-    for i in xrange(img_count):
+    for i in range(img_count):
         # Predict landmarks iteratively
         start_time = time.time()
         landmarks_all_steps[i], landmarks_mean[i] = predict_landmarks(images[i], config, shape_model,
@@ -145,14 +153,12 @@ def predict(data, config, shape_model, train,
     # Visualisation
     if config.visual:
         print("Show visualisation...")
-        for i in xrange(img_count):
+        for i in range(img_count):
             print("Processing visualisation {}/{}: {}".format(i+1, img_count, names[i]))
             visual.plot_landmarks_2d('./results/landmarks_visual2D', train, names[i], images_unscale[i],
                                      landmarks_mean_unscale[i], landmarks_gt_unscale[i])
-            visual.plot_landmarks_3d('./results/landmarks_visual3D', train, names[i], landmarks_mean[i],
-                                     landmarks_gt[i], images[i].shape)
-            visual.plot_landmarks_path('./results/landmark_path', train, names[i], landmarks_all_steps[i],
-                                       landmarks_gt[i], images[i].shape)
+            visual.plot_landmarks_3d('./results/landmarks_visual3D', train, names[i], landmarks_mean[i],landmarks_gt[i], images[i].shape)
+            visual.plot_landmarks_path('./results/landmark_path', train, names[i], landmarks_all_steps[i],landmarks_gt[i], images[i].shape)
 
 
 def predict_landmarks(image, config, shape_model,
@@ -182,13 +188,13 @@ def predict_landmarks(image, config, shape_model,
 
     # Extract patches from landmarks
     patches = np.zeros((num_examples, box_size, box_size, 3*num_landmarks))
-    for j in xrange(num_examples):
+    for j in range(num_examples):
         patches[j] = patch.extract_patch_all_landmarks(image, landmarks[j], box_r)       # patches=[num_examples, box_size, box_size, 3*num_landmarks]
 
     landmarks_all_steps = np.zeros((max_test_steps + 1, num_examples, num_landmarks, 3))
     landmarks_all_steps[0] = landmarks
 
-    for j in xrange(max_test_steps):    # find path of landmark iteratively
+    for j in range(max_test_steps):    # find path of landmark iteratively
         # Predict CNN outputs
         action_ind_val, yc_val, yr_val = sess.run([action_ind, yc, yr], feed_dict={x: patches, keep_prob: 1.0})
 
@@ -204,7 +210,7 @@ def predict_landmarks(image, config, shape_model,
         landmarks_all_steps[j+1] = landmarks
 
         # Extract patches from landmarks
-        for k in xrange(num_examples):
+        for k in range(num_examples):
             patches[k] = patch.extract_patch_all_landmarks(image, landmarks[k], box_r)       # patches=[num_examples, box_size, box_size, 3*num_landmarks]
 
     # Compute mean of all initialisations
@@ -275,11 +281,11 @@ def compute_err(landmarks, landmarks_gt, pix_dim):
     err_mm_mean = np.mean(err_mm)
     err_mm_std = np.std(err_mm)
     str = "Mean distance error (mm): "
-    for j in xrange(num_landmarks):
+    for j in range(num_landmarks):
         str += ("{:.10f} ".format(err_mm_landmark_mean[j]))
     print("{}".format(str))
     str = "Std distance error (mm): "
-    for j in xrange(num_landmarks):
+    for j in range(num_landmarks):
         str += ("{:.10f} ".format(err_mm_landmark_std[j]))
     print("{}".format(str))
     print("Mean distance error (mm) = {:.10f} \nStd distance error (mm) = {:.10f}\n".format(err_mm_mean, err_mm_std))

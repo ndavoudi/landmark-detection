@@ -1,4 +1,4 @@
-"""Functions for reading input data (image (nifti) and label (txt))."""
+"""Functions for reading input data (image (dicom) and label (txt))."""
 
 import os
 import numpy as np
@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from utils import shape_model_func
+import pydicom
+from operator import itemgetter
 
 
 class DataSet(object):
@@ -25,36 +27,61 @@ class DataSet(object):
 
 
 def get_file_list(txt_file):
-  """Get a list of filenames.
+    """
+    Get a list of filenames.
 
-  Args:
-    txt_file: Name of a txt file containing a list of filenames for the images.
+    Args:
+        txt_file: Name of a txt file containing a list of filenames for the images.
 
-  Returns:
-    filenames: A list of filenames for the images.
+    Returns:
+        filenames: A list of filenames for the images.
 
-  """
-  with open(txt_file) as f:
-    filenames = f.read().splitlines()
-  return filenames
+    """
+    with open(txt_file) as f:
+        filenames = f.read().splitlines()
+    return filenames
+
 
 
 def extract_image(filename):
-  """Extract the image into a 3D numpy array [x, y, z].
+    """ Read in the directory of a single subject and return a numpy array
+    Extract the image into a 3D numpy array [x, y, z].
 
-  Args:
-    filename: Path and name of nifti file.
+      Args:
+        filename: Path and name of dicom file.
 
-  Returns:
-    data: A 3D numpy array [x, y, z]
-    pix_dim: pixel spacings
+      Returns:
+        data: A 3D numpy array [x, y, z]
+        pix_dim: voxel spacings
 
-  """
-  img = nib.load(filename)
-  data = img.get_data()
-  data[np.isnan(data)] = 0
-  pix_dim = np.array(img.header.get_zooms())
-  return data, pix_dim
+     """
+    patient_path = os.path.join(filename)
+    patient_image_paths = [os.path.join(patient_path, slice_name) for slice_name in os.listdir(patient_path)]
+    patient_images = [pydicom.read_file(patient_slice_path) for patient_slice_path in patient_image_paths]
+    # some of the slices are not valid and must be excluded
+    patient_slices = [patient_slice for patient_slice in patient_images if 0 <= int(patient_slice.InstanceNumber) < len(patient_images)]
+    dicom_image = sorted(patient_slices, key=lambda x: int(x.InstanceNumber))
+    volume = [dicom_to_hounsfield_units(dvt_slice) for dvt_slice in dicom_image]
+    data = np.stack( volume, axis=0 )
+    pix_dim = np.float(patient_slices[0].PixelSpacing[0]), np.float(patient_slices[0].PixelSpacing[1]), np.float(patient_slices[0].SliceThickness)
+    return data, pix_dim
+
+
+def dicom_to_hounsfield_units(dicom_image):
+    """ Transforms the pixel values of a DICOM file into their value in the Hounsfield scale (quantitative scale for
+    describing radiodensity).
+
+    :param dicom_image: DICOM image
+    :type dicom_image: `pydicom.dataset.FileDataset`
+    :return: the DICOM image in Hounsfield Units
+    :rtype: `numpy.ndarray`
+    """
+    intercept = np.float(dicom_image.RescaleIntercept)
+    slope = np.float(dicom_image.RescaleSlope)
+
+    dicom_image = dicom_image.pixel_array.astype(np.float32) #float64
+    return (dicom_image * slope + intercept).astype(np.int16)
+
 
 
 def extract_label(filename):
@@ -69,18 +96,41 @@ def extract_label(filename):
   with open(filename) as f:
     labels = np.empty([0, 3], dtype=np.float64)
     for line in f:
-      labels = np.vstack((labels, map(float, line.split())))
+        #labels = np.vstack((labels, np.asarray(map(float, line.split()))))
+        labels2 = np.fromiter(map(float,line.split()), dtype=np.float64)
+        labels = np.vstack((labels, labels2))
+
   return labels
 
 
 
 
-def extract_all_image_and_label(file_list,
-                                data_dir,
-                                label_dir,
-                                landmark_count,
-                                landmark_unwant,
-                                shape_model):
+def select_label(labels, landmark_unwant):
+  """Unwanted landmarks are removed.
+     Remove topHead (landmark index 0).
+     Remove left or right ventricle (landmark index (6,7) or (8,9)).
+     Remove mid CSP (landmark index 13).
+     Remove left and right eyes (landmark index 14 and 15).
+  Args:
+    labels: a 2D float64 numpy array.
+    landmark_unwant: indices of the unwanted landmarks
+  Returns:
+    labels: a 2D float64 numpy array.
+  """
+  removed_label_ind = list(landmark_unwant)
+  labels = np.delete(labels, removed_label_ind, 0)
+  return labels
+
+
+
+#  extract_all_image_and_label
+def generate_batch_image_and_label(data_dir,
+                                   label_dir,
+                                   file_list,
+                                   landmark_count,
+                                   landmark_unwant,
+                                   shape_model,
+                                   batch_size):
   """Load the input images and landmarks and rescale to fixed size.
 
   Args:
@@ -88,7 +138,7 @@ def extract_all_image_and_label(file_list,
     data_dir: Directory storing images.
     label_dir: Directory storing labels.
     landmark_count: Number of landmarks used (unwanted landmarks removed)
-    landmark_unwant: list of unwanted landmark indices
+    landmark_unwant: discard these landmarks
     shape_model: structure containing the shape model
 
   Returns:
@@ -99,64 +149,34 @@ def extract_all_image_and_label(file_list,
     pix_dim: mm of each voxel. [img_count, 3]
 
   """
+  #while True:
   filenames = get_file_list(file_list)
   file_count = len(filenames)
+  batchcount = 0
   images = []
+  #labels = []
+  #pix_dims = []
+
   labels = np.zeros((file_count, landmark_count, 3), dtype=np.float64)
   pix_dim = np.zeros((file_count, 3))
+
+
   for i in range(len(filenames)):
-    filename = filenames[i]
-    print("Loading image {}/{}: {}".format(i+1, len(filenames), filename))
-    # load image
-    img, pix_dim[i] = extract_image(os.path.join(data_dir, filename+'.nii.gz'))
-    # load landmarks and remove unwanted ones. Labels already in voxel coordinate
-    label = extract_label(os.path.join(label_dir, filename+'_ps.txt'))
-    label = select_label(label, landmark_unwant)
-    # Store extracted data
-    images.append(np.expand_dims(img, axis=3))
-    labels[i, :, :] = label
-  # Compute shape parameters
-  shape_params = shape_model_func.landmarks2b(labels, shape_model)
-  return filenames, images, labels, shape_params, pix_dim
+      filename = filenames[i]
+      print("Loading image {}/{}: {}".format(i+1, len(filenames), filename))
+      # load image
+      img, pix_dim[i] = extract_image(os.path.join(data_dir, filename))
+      # load landmarks and remove unwanted ones. Labels already in voxel coordinate
+      label = extract_label(os.path.join(label_dir, filename+'_ps.txt'))
+      label = select_label(label, landmark_unwant)
+      # Store extracted data
+      images.append(np.expand_dims(img, axis=3))
+      #labels.append(label)
+      #pix_dims.append(pix_dim)
+      batchcount += 1
+      labels[i, :, :] = label
 
-
-def read_data_sets(data_dir,
-                   label_dir,
-                   train_list_file,
-                   test_list_file,
-                   landmark_count,
-                   landmark_unwant,
-                   shape_model):
-  """Load training and test dataset.
-
-  Args:
-    data_dir: Directory storing images.
-    label_dir: Directory storing labels.
-    train_list_file: txt file containing list of filenames for train images
-    test_list_file: txt file containing list of filenames for test images
-    landmark_count: Number of landmarks used (unwanted landmarks removed)
-    landmark_unwant: list of unwanted landmark indices
-    shape_model: structure storing the shape model
-
-  Returns:
-    data: A collections.namedtuple containing fields ['train', 'validation', 'test']
-
-  """
-  # Load images and landmarks
-  print("Loading train images...")
-  train_names, train_images, train_labels, train_shape_params, train_pix_dim = extract_all_image_and_label(train_list_file,
-                                                                                                           data_dir,
-                                                                                                           label_dir,
-                                                                                                           landmark_count,
-                                                                                                           landmark_unwant,
-                                                                                                           shape_model)
-  print("Loading test images...")
-  test_names, test_images, test_labels, test_shape_params, test_pix_dim = extract_all_image_and_label(test_list_file,
-                                                                                                      data_dir,
-                                                                                                      label_dir,
-                                                                                                      landmark_count,
-                                                                                                      landmark_unwant,
-                                                                                                      shape_model)
-  train = DataSet(train_names, train_images, train_labels, train_shape_params, train_pix_dim)
-  test = DataSet(test_names, test_images, test_labels, test_shape_params, test_pix_dim)
-  return base.Datasets(train=train, validation=None, test=test)
+      if batchcount == batch_size:
+          shape_params = shape_model_func.landmarks2b(labels, shape_model)
+          return (filename, images, labels, shape_params, pix_dim)
+          

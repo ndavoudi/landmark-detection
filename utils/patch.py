@@ -112,7 +112,7 @@ def extract_patch_all_landmarks(image, landmarks, box_r):
     """
     box_size = box_r*2+1
     patches = np.empty((box_size, box_size, 0))
-    for i in xrange(landmarks.shape[0]):
+    for i in range(landmarks.shape[0]):
         patch = extract_patch_all_planes(image, landmarks[i, 0], landmarks[i, 1], landmarks[i, 2], box_r)
         patches = np.concatenate((patches, patch), axis=2)
     return patches

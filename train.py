@@ -15,9 +15,11 @@ from __future__ import print_function
 
 import os
 import numpy as np
-import tensorflow as tf
+#import tensorflow as tf
 from utils import input_data, shape_model_func, network, patch
 
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 class Config(object):
     """Training configurations."""
@@ -26,6 +28,7 @@ class Config(object):
     label_dir = './data/Landmarks'
     train_list_file = './data/list_train.txt'
     test_list_file = './data/list_test.txt'
+    file_list = './data/list.txt'
     log_dir = './logs'
     model_dir = './cnn_model'
     # Shape model parameters
@@ -33,15 +36,16 @@ class Config(object):
     eigvec_per = 0.995      # Percentage of eigenvectors to keep
     sd = 3.0                # Standard deviation of shape parameters
     landmark_count = 10     # Number of landmarks
+    #landmark_unwant = []
     landmark_unwant = [0, 8, 9, 13, 14, 15]     # list of unwanted landmark indices
     # Training parameters
     resume = False          # Whether to train from scratch or resume previous training
     box_size = 101          # patch size (odd number)
     alpha = 0.5             # Weighting given to the loss (0<=alpha<=1). loss = alpha*loss_c + (1-alpha)*loss_r
     learning_rate = 0.001
-    max_steps = 100000      # Number of steps to train
-    save_interval = 25000   # Number of steps in between saving each model
-    batch_size = 64         # Training batch size
+    max_steps = 10 #100000      # Number of steps to train
+    save_interval = 5 #25000   # Number of steps in between saving each model
+    batch_size = 3 #64         # Training batch size
     dropout = 0.5
 
 
@@ -54,14 +58,16 @@ def main():
     num_cnn_output_r = shape_model['Evectors'].shape[1]
 
     # Load images and landmarks
-    data = input_data.read_data_sets(config.data_dir,
-                                     config.label_dir,
-                                     config.train_list_file,
-                                     config.test_list_file,
-                                     config.landmark_count,
-                                     config.landmark_unwant,
-                                     shape_model)
+    filename, images, labels, shape_params, pix_dims = input_data.generate_batch_image_and_label(config.data_dir,
+                                                                                                 config.label_dir,
+                                                                                                 config.file_list,
+                                                                                                 config.landmark_count,
+                                                                                                 config.landmark_unwant,
+                                                                                                 shape_model,
+                                                                                                 config.batch_size)
 
+
+    print('names', filename)
     # Build graph
     print("Building graph...")
     # Input placeholders
@@ -152,10 +158,10 @@ def main():
         ite_start = 0
         ite_end = config.max_steps
 
-    for i in xrange(ite_start, ite_end):
+    for i in range(ite_start, ite_end):
         patches_train, actions_train, dbs_train, _ = get_train_pairs(config.batch_size,
-                                                                     data.train.images,
-                                                                     data.train.shape_params,
+                                                                     images,
+                                                                     shape_params,
                                                                      config.box_size,
                                                                      num_cnn_output_c,
                                                                      num_cnn_output_r,
@@ -165,8 +171,8 @@ def main():
         if i % 1000 == 0:
             # Record summaries and test-set loss and accuracy
             patches_test, actions_test, dbs_test, _ = get_train_pairs(config.batch_size,
-                                                                      data.test.images,
-                                                                      data.test.shape_params,
+                                                                      images,
+                                                                      shape_params,
                                                                       config.box_size,
                                                                       num_cnn_output_c,
                                                                       num_cnn_output_r,
@@ -243,7 +249,8 @@ def get_train_pairs(batch_size, images, bs_gt, box_size, num_actions, num_regres
     landmarks = shape_model_func.b2landmarks(bs, shape_model)
 
     # Extract image patch
-    for i in xrange(batch_size):
+    for i in range(batch_size):
+    #for i in xrange(batch_size):
         image = images[ind[i]]
         patches[i] = patch.extract_patch_all_landmarks(image, landmarks[i], box_r)
 

@@ -36,32 +36,32 @@ def save_err(save_dir, train, names, dist_err, dist_err_mm):
     with open(os.path.join(save_dir, 'dist_error_'+suffix+'.txt'), 'w') as f:
         # Record results in pixel
         f.write("Distance error (pixel)\n")
-        for i in xrange(img_count):
+        for i in range(img_count):
             f.write("{} ".format(names[i]))
-            for j in xrange(dist_err.shape[1]):
+            for j in range(dist_err.shape[1]):
                 f.write("{:.10f} ".format(dist_err[i, j]))
             f.write("\n")
         f.write("\nMean: ")
-        for i in xrange(num_landmarks):
+        for i in range(num_landmarks):
             f.write("{} ".format(dist_err_landmarks_mean[i]))
         f.write("\nStandard deviation: ")
-        for i in xrange(num_landmarks):
+        for i in range(num_landmarks):
             f.write("{} ".format(dist_err_landmarks_std[i]))
         f.write("\nMean: {:.10f}".format(dist_err_mean))
         f.write("\nStandard deviation: {:.10f}".format(dist_err_std))
 
         # Record results in mm
         f.write("\n\nDistance error (mm)\n")
-        for i in xrange(img_count):
+        for i in range(img_count):
             f.write("{} ".format(names[i]))
-            for j in xrange(dist_err_mm.shape[1]):
+            for j in range(dist_err_mm.shape[1]):
                 f.write("{:.10f} ".format(dist_err_mm[i, j]))
             f.write("\n")
         f.write("\nMean: ")
-        for i in xrange(num_landmarks):
+        for i in range(num_landmarks):
             f.write("{} ".format(dist_err_mm_landmarks_mean[i]))
         f.write("\nStandard deviation: ")
-        for i in xrange(num_landmarks):
+        for i in range(num_landmarks):
             f.write("{} ".format(dist_err_mm_landmarks_std[i]))
         f.write("\nMean: {:.10f}".format(dist_err_mm_mean))
         f.write("\nStandard deviation: {:.10f}".format(dist_err_mm_std))

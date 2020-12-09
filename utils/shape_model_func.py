@@ -55,7 +55,7 @@ def b2landmarks(b, shape_model):
 
     """
     landmarks = np.transpose(np.matmul(shape_model['Evectors'], np.transpose(b))) + shape_model['x_mean']
-    landmarks = np.reshape(landmarks, (landmarks.shape[0], landmarks.shape[1]/3, 3))
+    landmarks = np.reshape(landmarks, (landmarks.shape[0], int(landmarks.shape[1]/3), 3))
     return landmarks
 
 

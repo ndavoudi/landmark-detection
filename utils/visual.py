@@ -5,7 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from mpl_toolkits.mplot3d import Axes3D
-import plane
+#import plane
+from . import plane
+
 
 
 def project_landmarks(image, landmarks, landmarks_gt, plane_name):
@@ -67,13 +69,14 @@ def plot_landmarks_2d(save_dir, train, name, image, landmarks, landmarks_gt):
     slice_tv, landmarks_tv_proj, landmarks_gt_tv_proj = project_landmarks(image, landmarks_tv, landmarks_gt_tv, 'tv')
     slice_tc, landmarks_tc_proj, landmarks_gt_tc_proj = project_landmarks(image, landmarks_tc, landmarks_gt_tc, 'tc')
 
+
     fig = plt.figure()
     plt.subplot(121)
     plt.title('{}'.format('TV plane'))
     plt.axis('off')
     plt.imshow(slice_tv, cmap='gray')
-    marker_size = np.abs(landmarks_tv_proj[:, 2]) * 5
-    plt.scatter(landmarks_tv_proj[:, 1], landmarks_tv_proj[:, 0], c=[0, 1, 0], s=marker_size, alpha=0.3)
+    marker_size = np.abs(landmarks_tv_proj[:, 2]) * 5 #### what is the reason, not in paper
+    #plt.scatter(landmarks_tv_proj[:, 1], landmarks_tv_proj[:, 0], c=[0, 1, 0], s=marker_size, alpha=0.3)
     plt.scatter(landmarks_tv_proj[:, 1], landmarks_tv_proj[:, 0], c=[0, 1, 0], s=6)
     plt.scatter(landmarks_gt_tv_proj[:, 1], landmarks_gt_tv_proj[:, 0], c=[1, 0, 0], s=6)
     plt.subplot(122)
@@ -81,7 +84,7 @@ def plot_landmarks_2d(save_dir, train, name, image, landmarks, landmarks_gt):
     plt.axis('off')
     plt.imshow(slice_tc, cmap='gray')
     marker_size = np.abs(landmarks_tc_proj[:, 2]) * 5
-    plt.scatter(landmarks_tc_proj[:, 1], landmarks_tc_proj[:, 0], c=landmarks_tc_proj.shape[0]*[[0, 1, 0]], s=marker_size, alpha=0.3)
+    #plt.scatter(landmarks_tc_proj[:, 1], landmarks_tc_proj[:, 0], c=landmarks_tc_proj.shape[0]*[[0, 1, 0]], s=marker_size, alpha=0.3)
     plt.scatter(landmarks_tc_proj[:, 1], landmarks_tc_proj[:, 0], c=landmarks_tc_proj.shape[0]*[[0, 1, 0]], s=6)
     plt.scatter(landmarks_gt_tc_proj[:, 1], landmarks_gt_tc_proj[:, 0], c=landmarks_tc_proj.shape[0]*[[1, 0, 0]], s=6)
     if train:
@@ -151,7 +154,7 @@ def plot_landmarks_path(save_dir, train, name, landmarks_all_steps, landmarks_gt
     fig.set_tight_layout(True)
     ax.plot(landmarks_gt[:, 0], landmarks_gt[:, 1], landmarks_gt[:, 2], 'rx')
     pt = []
-    for j in xrange(num_landmarks):
+    for j in range(num_landmarks):
         pt.append(ax.plot(landmarks_all_steps[0, :, j, 0], landmarks_all_steps[0, :, j, 1],
                            landmarks_all_steps[0, :, j, 2], '.', c=c[j])[0])
     ax.set_xlabel('x')
@@ -163,7 +166,7 @@ def plot_landmarks_path(save_dir, train, name, landmarks_all_steps, landmarks_gt
     ax.set_title('{}'.format(name))
 
     def update(n):
-        for j in xrange(num_landmarks):
+        for j in range(num_landmarks):
             pt[j].set_data(landmarks_all_steps[n, :, j, 0], landmarks_all_steps[n, :, j, 1])  # x and y axis
             pt[j].set_3d_properties(zs=landmarks_all_steps[n, :, j, 2])  # z axis
         return pt
@@ -179,5 +182,6 @@ def plot_landmarks_path(save_dir, train, name, landmarks_all_steps, landmarks_gt
         save_dir = os.path.join(save_dir, 'test')
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
-    anim.save(os.path.join(save_dir, name + '.gif'), dpi=80, writer='imagemagick')
+    plt.show()
+    #anim.save(os.path.join(save_dir, name + '.gif'), dpi=80, writer='imagemagick')
     plt.close(fig)
